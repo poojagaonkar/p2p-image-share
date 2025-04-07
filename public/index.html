@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Image Share</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2196f3">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>P2P Image Share</h1>
+            <div class="connection-status">
+                <span id="status">Not Connected</span>
+            </div>
+        </header>
+
+        <main>
+            <div class="connection-section">
+                <div class="room-controls">
+                    <input type="text" id="roomId" placeholder="Enter Room ID">
+                    <button id="createRoom">Create Room</button>
+                    <button id="joinRoom">Join Room</button>
+                </div>
+            </div>
+
+            <div class="image-section">
+                <div class="upload-area" id="dropZone">
+                    <input type="file" id="fileInput" accept="image/*" multiple>
+                    <label for="fileInput">
+                        <div class="upload-prompt">
+                            <span>Drop images here or click to select</span>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="gallery" id="imageGallery">
+                    <!-- Images will be displayed here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', {
+                    scope: '/'
+                })
+                .then(registration => {
+                    console.log('ServiceWorker registration successful');
+                })
+                .catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html> 
