@@ -11,9 +11,15 @@
 <body>
     <div class="container">
         <header>
-            <h1>P2P Image Share</h1>
+            <div class="header-top">
+                <h1>P2P Image Share</h1>
+                <div class="version">v<span id="version">1.0.0</span></div>
+            </div>
             <div class="connection-status">
-                <span id="status">Not Connected</span>
+                <div id="status">Not Connected</div>
+                <div class="peer-count">
+                    Connected peers: <span id="peerCount">0</span>
+                </div>
             </div>
         </header>
 
