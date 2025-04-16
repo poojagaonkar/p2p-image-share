@@ -69,13 +69,42 @@ h1 {
     margin-bottom: 1rem;
 }
 
-.version {
+.version-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-size: 0.9rem;
     color: #666;
     background-color: #f0f0f0;
     padding: 0.3rem 0.6rem;
     border-radius: 12px;
     font-family: monospace;
+}
+
+.version-label {
+    font-weight: 500;
+}
+
+.version-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-left: 0.3rem;
+}
+
+.version-status.compatible {
+    background-color: #4CAF50;
+}
+
+.version-status.incompatible {
+    background-color: #F44336;
+}
+
+.version-status.warning {
+    background-color: #FFC107;
 }
 
 /* Room controls styles */

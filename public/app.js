@@ -6,9 +6,16 @@ class P2PImageShare {
         this.isHost = false;
         
         // Version management
-        this.version = '1.0.0';
+        this.version = '1.1.0';
+        this.minCompatibleVersion = '1.0.0';
         this.versionElement = document.getElementById('version');
+        this.versionStatusElement = document.getElementById('versionStatus');
         this.versionElement.textContent = this.version;
+        
+        // Connection monitoring
+        this.connectionCheckInterval = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 3;
         
         this.initializeElements();
         this.setupEventListeners();
@@ -24,6 +31,7 @@ class P2PImageShare {
         this.imageGallery = document.getElementById('imageGallery');
         this.peerCountElement = document.getElementById('peerCount');
         this.copyButton = document.getElementById('copyRoomId');
+        this.versionStatusElement = document.getElementById('versionStatus');
     }
 
     setupEventListeners() {
@@ -63,6 +71,7 @@ class P2PImageShare {
                 this.updateStatus(`Room created. Share this ID: ${id}`);
                 this.roomIdInput.value = id;
                 this.updatePeerCount();
+                this.startConnectionMonitoring();
             });
 
             this.peer.on('connection', (conn) => {
@@ -72,6 +81,18 @@ class P2PImageShare {
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 this.updateStatus('Connection error: ' + err.type);
+            });
+            
+            this.peer.on('disconnected', () => {
+                console.log('Peer disconnected, attempting to reconnect...');
+                this.updateStatus('Connection lost, reconnecting...');
+                this.peer.reconnect();
+            });
+            
+            this.peer.on('close', () => {
+                console.log('Peer connection closed');
+                this.updateStatus('Connection closed');
+                this.stopConnectionMonitoring();
             });
         } catch (error) {
             console.error('Error creating room:', error);
@@ -113,6 +134,7 @@ class P2PImageShare {
                     this.isHost = false;
                     this.updateStatus(`Connected to room: ${roomId}`);
                     this.updatePeerCount();
+                    this.startConnectionMonitoring();
                 });
 
                 conn.on('error', (err) => {
@@ -125,6 +147,18 @@ class P2PImageShare {
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
+            });
+            
+            this.peer.on('disconnected', () => {
+                console.log('Peer disconnected, attempting to reconnect...');
+                this.updateStatus('Connection lost, reconnecting...');
+                this.peer.reconnect();
+            });
+            
+            this.peer.on('close', () => {
+                console.log('Peer connection closed');
+                this.updateStatus('Connection closed');
+                this.stopConnectionMonitoring();
             });
         } catch (error) {
             console.error('Error joining room:', error);
@@ -141,16 +175,22 @@ class P2PImageShare {
             // Share version information with new peer
             conn.send({
                 type: 'version',
-                version: this.version
+                version: this.version,
+                minCompatibleVersion: this.minCompatibleVersion
             });
+            
+            console.log(`New connection established with peer: ${conn.peer}`);
         });
 
         conn.on('data', (data) => {
+            console.log(`Received data from peer ${conn.peer}:`, data.type);
+            
             if (data.type === 'image') {
+                console.log(`Received image data, length: ${data.imageData ? data.imageData.length : 'undefined'} characters`);
                 this.displayImage(data.imageData);
             } else if (data.type === 'version') {
-                console.log(`Peer version: ${data.version}`);
-                // You could add logic here to handle version compatibility
+                console.log(`Peer version: ${data.version}, min compatible: ${data.minCompatibleVersion}`);
+                this.checkVersionCompatibility(data.version, data.minCompatibleVersion, conn);
             }
         });
 
@@ -158,12 +198,68 @@ class P2PImageShare {
             this.connections.delete(conn.peer);
             this.updateStatus('Peer disconnected');
             this.updatePeerCount();
+            console.log(`Peer disconnected: ${conn.peer}`);
         });
 
         conn.on('error', (err) => {
             console.error('Connection error:', err);
             this.updateStatus('Connection error with peer');
         });
+    }
+
+    checkVersionCompatibility(peerVersion, peerMinVersion, conn) {
+        // Parse versions
+        const [major, minor, patch] = this.version.split('.').map(Number);
+        const [peerMajor, peerMinor, peerPatch] = peerVersion.split('.').map(Number);
+        const [minMajor, minMinor, minPatch] = this.minCompatibleVersion.split('.').map(Number);
+        const [peerMinMajor, peerMinMinor, peerMinPatch] = peerMinVersion.split('.').map(Number);
+        
+        // Check if our version is compatible with peer's minimum
+        const isCompatibleWithPeer = 
+            major > peerMinMajor || 
+            (major === peerMinMajor && minor > peerMinMinor) || 
+            (major === peerMinMajor && minor === peerMinMinor && patch >= peerMinPatch);
+        
+        // Check if peer's version is compatible with our minimum
+        const isPeerCompatibleWithUs = 
+            peerMajor > minMajor || 
+            (peerMajor === minMajor && peerMinor > minMinor) || 
+            (peerMajor === minMajor && peerMinor === minMinor && peerPatch >= minPatch);
+        
+        // Update version status indicator
+        if (isCompatibleWithPeer && isPeerCompatibleWithUs) {
+            this.updateVersionStatus('compatible');
+        } else if (!isCompatibleWithPeer && !isPeerCompatibleWithUs) {
+            this.updateVersionStatus('incompatible');
+        } else {
+            this.updateVersionStatus('warning');
+        }
+        
+        if (!isCompatibleWithPeer) {
+            console.warn(`Our version ${this.version} is not compatible with peer's minimum version ${peerMinVersion}`);
+            this.updateStatus(`Warning: Your version may not be compatible with the peer`);
+        }
+        
+        if (!isPeerCompatibleWithUs) {
+            console.warn(`Peer's version ${peerVersion} is not compatible with our minimum version ${this.minCompatibleVersion}`);
+            this.updateStatus(`Warning: Peer's version may not be compatible with yours`);
+        }
+        
+        // Send acknowledgment
+        conn.send({
+            type: 'version_ack',
+            compatible: isCompatibleWithPeer && isPeerCompatibleWithUs
+        });
+    }
+
+    updateVersionStatus(status) {
+        // Remove all status classes
+        this.versionStatusElement.classList.remove('compatible', 'incompatible', 'warning');
+        
+        // Add the new status class
+        if (status) {
+            this.versionStatusElement.classList.add(status);
+        }
     }
 
     handleFileSelect(event) {
@@ -175,7 +271,18 @@ class P2PImageShare {
         for (const file of files) {
             if (file.type.startsWith('image/')) {
                 try {
-                    const imageData = await this.readFileAsDataURL(file);
+                    console.log(`Processing image file: ${file.name}, size: ${file.size} bytes`);
+                    
+                    // Compress image if it's too large
+                    let imageData;
+                    if (file.size > 500000) { // If larger than ~500KB
+                        console.log('Image is large, compressing before sending...');
+                        imageData = await this.compressImage(file);
+                    } else {
+                        imageData = await this.readFileAsDataURL(file);
+                    }
+                    
+                    console.log(`Image data length: ${imageData.length} characters`);
                     this.displayImage(imageData);
                     this.shareImage(imageData);
                 } catch (error) {
@@ -191,6 +298,52 @@ class P2PImageShare {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
             reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async compressImage(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Calculate new dimensions while maintaining aspect ratio
+                const maxDimension = 1200; // Max width or height
+                if (width > height && width > maxDimension) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                } else if (height > maxDimension) {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Compress as JPEG with 0.7 quality
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                console.log(`Compressed image from ${file.size} bytes to ${compressedDataUrl.length} characters`);
+                resolve(compressedDataUrl);
+            };
+            
+            img.onerror = () => {
+                reject(new Error('Failed to load image for compression'));
+            };
+            
+            // Load the image from the file
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.src = e.target.result;
+            };
+            reader.onerror = () => {
+                reject(new Error('Failed to read file'));
+            };
             reader.readAsDataURL(file);
         });
     }
@@ -244,14 +397,20 @@ class P2PImageShare {
             imageData: imageData
         };
 
+        console.log(`Sharing image with ${this.connections.size} peers`);
+        
         this.connections.forEach(conn => {
             if (conn.open) {
                 try {
+                    console.log(`Sending image to peer: ${conn.peer}`);
                     conn.send(message);
+                    console.log(`Image sent successfully to peer: ${conn.peer}`);
                 } catch (error) {
                     console.error('Error sending image:', error);
                     this.updateStatus('Error sending image to peer');
                 }
+            } else {
+                console.warn(`Connection to peer ${conn.peer} is not open`);
             }
         });
     }
@@ -289,6 +448,11 @@ class P2PImageShare {
         
         this.versionElement.textContent = this.version;
         console.log(`Version updated to ${this.version}`);
+        
+        // Update minCompatibleVersion if needed
+        if (type === 'major') {
+            this.minCompatibleVersion = this.version;
+        }
     }
 
     async copyRoomId() {
@@ -310,6 +474,54 @@ class P2PImageShare {
         } catch (err) {
             console.error('Failed to copy room ID:', err);
             this.updateStatus('Failed to copy room ID');
+        }
+    }
+
+    startConnectionMonitoring() {
+        // Check connection status every 10 seconds
+        this.connectionCheckInterval = setInterval(() => {
+            this.checkConnections();
+        }, 10000);
+    }
+    
+    stopConnectionMonitoring() {
+        if (this.connectionCheckInterval) {
+            clearInterval(this.connectionCheckInterval);
+            this.connectionCheckInterval = null;
+        }
+    }
+    
+    checkConnections() {
+        if (!this.peer || this.peer.disconnected) {
+            console.log('Peer is disconnected, attempting to reconnect...');
+            this.updateStatus('Connection lost, reconnecting...');
+            this.peer.reconnect();
+            return;
+        }
+        
+        // Check if we have any open connections
+        let hasOpenConnections = false;
+        this.connections.forEach((conn, peerId) => {
+            if (conn.open) {
+                hasOpenConnections = true;
+            } else {
+                console.warn(`Connection to peer ${peerId} is not open`);
+                this.connections.delete(peerId);
+            }
+        });
+        
+        // If we're not the host and have no open connections, try to reconnect
+        if (!this.isHost && !hasOpenConnections && this.roomId) {
+            console.log('No open connections, attempting to reconnect...');
+            this.updateStatus('Connection lost, attempting to reconnect...');
+            
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                this.joinRoom();
+            } else {
+                this.updateStatus('Failed to reconnect after multiple attempts');
+                this.stopConnectionMonitoring();
+            }
         }
     }
 }
