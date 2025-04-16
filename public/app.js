@@ -175,10 +175,24 @@ class P2PImageShare {
 
     async createRoom() {
         try {
+            // Update debug info before creating peer
+            this.debugInfo.connectionStatus = 'initializing';
+            this.updateDebugInfo();
+            
             this.peer = new Peer({
                 secure: true,
                 host: '0.peerjs.com',
-                port: 443
+                port: 443,
+                debug: 3,  // Enable debug logging
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' }
+                    ]
+                }
             });
 
             this.peer.on('open', (id) => {
@@ -230,6 +244,10 @@ class P2PImageShare {
         } catch (error) {
             console.error('Error creating room:', error);
             this.updateStatus('Error creating room');
+            
+            // Update debug info
+            this.debugInfo.connectionStatus = `error: ${error.message}`;
+            this.updateDebugInfo();
         }
     }
 
@@ -241,36 +259,83 @@ class P2PImageShare {
         }
 
         try {
+            // Update debug info before creating peer
+            this.debugInfo.connectionStatus = 'initializing';
+            this.updateDebugInfo();
+            
             this.peer = new Peer({
                 secure: true,
                 host: '0.peerjs.com',
                 port: 443,
-                debug: 3  // Enable debug logging
+                debug: 3,  // Enable debug logging
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' }
+                    ]
+                }
             });
 
             this.peer.on('open', () => {
                 console.log('Attempting to connect to peer:', roomId);
-                const conn = this.peer.connect(roomId);
+                this.updateStatus(`Connecting to room: ${roomId}...`);
                 
                 // Update debug info
                 this.debugInfo.peerId = this.peer.id;
                 this.debugInfo.connectionStatus = 'connecting';
                 this.updateDebugInfo();
                 
-                // Add connection timeout
-                const timeout = setTimeout(() => {
-                    if (!conn.open) {
-                        this.updateStatus('Connection timeout - peer not responding');
-                        console.error('Connection timeout to peer:', roomId);
-                        
-                        // Update debug info
-                        this.debugInfo.connectionStatus = 'timeout';
-                        this.updateDebugInfo();
+                const conn = this.peer.connect(roomId);
+                
+                // Add connection timeout with retry logic
+                let timeoutId = null;
+                let retryCount = 0;
+                const maxRetries = 3;
+                
+                const attemptConnection = () => {
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
                     }
-                }, 10000);  // 10 second timeout
+                    
+                    timeoutId = setTimeout(() => {
+                        if (!conn.open) {
+                            console.error(`Connection timeout to peer: ${roomId} (attempt ${retryCount + 1}/${maxRetries})`);
+                            
+                            if (retryCount < maxRetries) {
+                                retryCount++;
+                                this.updateStatus(`Connection timeout - retrying (${retryCount}/${maxRetries})...`);
+                                
+                                // Update debug info
+                                this.debugInfo.connectionStatus = `timeout (retry ${retryCount}/${maxRetries})`;
+                                this.updateDebugInfo();
+                                
+                                // Try to reconnect
+                                attemptConnection();
+                            } else {
+                                this.updateStatus('Connection failed after multiple attempts');
+                                
+                                // Update debug info
+                                this.debugInfo.connectionStatus = 'failed';
+                                this.updateDebugInfo();
+                                
+                                // Reset peer to allow another attempt
+                                this.peer.destroy();
+                                this.peer = null;
+                            }
+                        }
+                    }, 10000);  // 10 second timeout
+                };
+                
+                attemptConnection();
 
                 conn.on('open', () => {
-                    clearTimeout(timeout);
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
+                    
                     this.handleNewConnection(conn);
                     this.roomId = roomId;
                     this.isHost = false;
@@ -284,7 +349,10 @@ class P2PImageShare {
                 });
 
                 conn.on('error', (err) => {
-                    clearTimeout(timeout);
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
+                    
                     console.error('Connection error:', err);
                     this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
                     
@@ -325,10 +393,20 @@ class P2PImageShare {
         } catch (error) {
             console.error('Error joining room:', error);
             this.updateStatus(`Error joining room: ${error.message}`);
+            
+            // Update debug info
+            this.debugInfo.connectionStatus = `error: ${error.message}`;
+            this.updateDebugInfo();
         }
     }
 
     handleNewConnection(conn) {
+        console.log(`New connection established with peer: ${conn.peer}`);
+        
+        // Update debug info
+        this.debugInfo.connectedPeers.push(conn.peer);
+        this.updateDebugInfo();
+        
         conn.on('open', () => {
             this.connections.set(conn.peer, conn);
             this.updateStatus(`Connected to peer: ${conn.peer}`);
@@ -341,11 +419,21 @@ class P2PImageShare {
                 minCompatibleVersion: this.minCompatibleVersion
             });
             
-            console.log(`New connection established with peer: ${conn.peer}`);
-            
-            // Update debug info
-            this.debugInfo.connectedPeers.push(conn.peer);
-            this.updateDebugInfo();
+            // Send a test message to verify the connection
+            setTimeout(() => {
+                if (conn.open) {
+                    try {
+                        conn.send({
+                            type: 'test',
+                            message: 'Connection test',
+                            timestamp: Date.now()
+                        });
+                        console.log(`Test message sent to peer: ${conn.peer}`);
+                    } catch (error) {
+                        console.error(`Error sending test to peer ${conn.peer}:`, error);
+                    }
+                }
+            }, 1000);
         });
 
         conn.on('data', (data) => {
@@ -386,6 +474,20 @@ class P2PImageShare {
             // Update debug info
             this.debugInfo.connectedPeers = this.debugInfo.connectedPeers.filter(id => id !== conn.peer);
             this.updateDebugInfo();
+            
+            // If we're not the host and have no connections, try to reconnect
+            if (!this.isHost && this.connections.size === 0 && this.roomId) {
+                console.log('No open connections, attempting to reconnect...');
+                this.updateStatus('Connection lost, attempting to reconnect...');
+                
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    this.joinRoom();
+                } else {
+                    this.updateStatus('Failed to reconnect after multiple attempts');
+                    this.stopConnectionMonitoring();
+                }
+            }
         });
 
         conn.on('error', (err) => {
