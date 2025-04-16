@@ -17,6 +17,9 @@ class P2PImageShare {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 3;
         
+        // Image chunk handling
+        this.imageChunks = new Map(); // Map to store image chunks by peer ID
+        
         // Debug info
         this.debugInfo = {
             lastReceivedImage: null,
@@ -407,6 +410,13 @@ class P2PImageShare {
         this.debugInfo.connectedPeers.push(conn.peer);
         this.updateDebugInfo();
         
+        // Initialize image chunks storage for this peer
+        this.imageChunks.set(conn.peer, {
+            chunks: [],
+            totalChunks: 0,
+            receivedChunks: 0
+        });
+        
         conn.on('open', () => {
             this.connections.set(conn.peer, conn);
             this.updateStatus(`Connected to peer: ${conn.peer}`);
@@ -434,6 +444,24 @@ class P2PImageShare {
                     }
                 }
             }, 1000);
+            
+            // If we're the host, send a special message to establish the connection
+            if (this.isHost) {
+                setTimeout(() => {
+                    if (conn.open) {
+                        try {
+                            conn.send({
+                                type: 'host_ack',
+                                message: 'Host connection established',
+                                timestamp: Date.now()
+                            });
+                            console.log(`Host acknowledgment sent to peer: ${conn.peer}`);
+                        } catch (error) {
+                            console.error(`Error sending host acknowledgment to peer ${conn.peer}:`, error);
+                        }
+                    }
+                }, 2000);
+            }
         });
 
         conn.on('data', (data) => {
@@ -446,6 +474,82 @@ class P2PImageShare {
                 // Update debug info
                 this.debugInfo.lastReceivedImage = Date.now();
                 this.updateDebugInfo();
+                
+                // Send acknowledgment back to the sender
+                if (conn.open) {
+                    try {
+                        conn.send({
+                            type: 'image_ack',
+                            message: 'Image received successfully',
+                            timestamp: Date.now()
+                        });
+                        console.log(`Image acknowledgment sent to peer: ${conn.peer}`);
+                    } catch (error) {
+                        console.error(`Error sending image acknowledgment to peer ${conn.peer}:`, error);
+                    }
+                }
+            } else if (data.type === 'image_chunks_info') {
+                console.log(`Received image chunks info from peer ${conn.peer}: ${data.totalChunks} chunks`);
+                
+                // Initialize or reset the chunks storage for this peer
+                this.imageChunks.set(conn.peer, {
+                    chunks: new Array(data.totalChunks),
+                    totalChunks: data.totalChunks,
+                    receivedChunks: 0
+                });
+                
+                // Send acknowledgment
+                if (conn.open) {
+                    try {
+                        conn.send({
+                            type: 'chunks_info_ack',
+                            message: 'Chunks info received',
+                            timestamp: Date.now()
+                        });
+                        console.log(`Chunks info acknowledgment sent to peer: ${conn.peer}`);
+                    } catch (error) {
+                        console.error(`Error sending chunks info acknowledgment to peer ${conn.peer}:`, error);
+                    }
+                }
+            } else if (data.type === 'image_chunk') {
+                console.log(`Received image chunk ${data.chunkIndex + 1}/${data.totalChunks} from peer ${conn.peer}`);
+                
+                // Get the chunks storage for this peer
+                const peerChunks = this.imageChunks.get(conn.peer);
+                if (peerChunks) {
+                    // Store the chunk
+                    peerChunks.chunks[data.chunkIndex] = data.chunkData;
+                    peerChunks.receivedChunks++;
+                    
+                    // Check if we've received all chunks
+                    if (peerChunks.receivedChunks === peerChunks.totalChunks) {
+                        console.log(`All chunks received from peer ${conn.peer}, assembling image`);
+                        
+                        // Assemble the image
+                        const imageData = peerChunks.chunks.join('');
+                        
+                        // Display the image
+                        this.displayImage(imageData);
+                        
+                        // Update debug info
+                        this.debugInfo.lastReceivedImage = Date.now();
+                        this.updateDebugInfo();
+                        
+                        // Send acknowledgment
+                        if (conn.open) {
+                            try {
+                                conn.send({
+                                    type: 'image_ack',
+                                    message: 'Image received successfully',
+                                    timestamp: Date.now()
+                                });
+                                console.log(`Image acknowledgment sent to peer: ${conn.peer}`);
+                            } catch (error) {
+                                console.error(`Error sending image acknowledgment to peer ${conn.peer}:`, error);
+                            }
+                        }
+                    }
+                }
             } else if (data.type === 'version') {
                 console.log(`Peer version: ${data.version}, min compatible: ${data.minCompatibleVersion}`);
                 this.checkVersionCompatibility(data.version, data.minCompatibleVersion, conn);
@@ -462,6 +566,14 @@ class P2PImageShare {
             } else if (data.type === 'test_ack') {
                 console.log(`Received test acknowledgment from peer ${conn.peer}:`, data.message);
                 this.updateStatus(`Connection test successful with peer ${conn.peer}`);
+            } else if (data.type === 'host_ack') {
+                console.log(`Received host acknowledgment from peer ${conn.peer}:`, data.message);
+                this.updateStatus(`Host connection established with peer ${conn.peer}`);
+            } else if (data.type === 'image_ack') {
+                console.log(`Received image acknowledgment from peer ${conn.peer}:`, data.message);
+                this.updateStatus(`Image received by peer ${conn.peer}`);
+            } else if (data.type === 'chunks_info_ack') {
+                console.log(`Received chunks info acknowledgment from peer ${conn.peer}:`, data.message);
             }
         });
 
@@ -474,6 +586,9 @@ class P2PImageShare {
             // Update debug info
             this.debugInfo.connectedPeers = this.debugInfo.connectedPeers.filter(id => id !== conn.peer);
             this.updateDebugInfo();
+            
+            // Clean up image chunks storage
+            this.imageChunks.delete(conn.peer);
             
             // If we're not the host and have no connections, try to reconnect
             if (!this.isHost && this.connections.size === 0 && this.roomId) {
@@ -685,31 +800,93 @@ class P2PImageShare {
     }
 
     shareImage(imageData) {
-        const message = {
-            type: 'image',
-            imageData: imageData
-        };
-
+        // Check if we have any connections
+        if (this.connections.size === 0) {
+            this.updateStatus('No peers connected to share with');
+            return;
+        }
+        
         console.log(`Sharing image with ${this.connections.size} peers`);
         
         // Update debug info
         this.debugInfo.lastSentImage = Date.now();
         this.updateDebugInfo();
         
-        this.connections.forEach(conn => {
-            if (conn.open) {
-                try {
-                    console.log(`Sending image to peer: ${conn.peer}`);
-                    conn.send(message);
-                    console.log(`Image sent successfully to peer: ${conn.peer}`);
-                } catch (error) {
-                    console.error('Error sending image:', error);
-                    this.updateStatus('Error sending image to peer');
-                }
-            } else {
-                console.warn(`Connection to peer ${conn.peer} is not open`);
+        // Check if the image is too large and needs chunking
+        const maxChunkSize = 16384; // 16KB chunks for reliable transmission
+        
+        if (imageData.length > maxChunkSize) {
+            console.log(`Image is large (${imageData.length} characters), sending in chunks`);
+            
+            // Split the image data into chunks
+            const chunks = [];
+            for (let i = 0; i < imageData.length; i += maxChunkSize) {
+                chunks.push(imageData.substring(i, i + maxChunkSize));
             }
-        });
+            
+            // Send the number of chunks first
+            const chunkInfo = {
+                type: 'image_chunks_info',
+                totalChunks: chunks.length,
+                timestamp: Date.now()
+            };
+            
+            this.connections.forEach(conn => {
+                if (conn.open) {
+                    try {
+                        console.log(`Sending image chunk info to peer: ${conn.peer}`);
+                        conn.send(chunkInfo);
+                        
+                        // Send each chunk with a small delay to prevent overwhelming the connection
+                        chunks.forEach((chunk, index) => {
+                            setTimeout(() => {
+                                if (conn.open) {
+                                    try {
+                                        const chunkMessage = {
+                                            type: 'image_chunk',
+                                            chunkIndex: index,
+                                            totalChunks: chunks.length,
+                                            chunkData: chunk,
+                                            timestamp: Date.now()
+                                        };
+                                        conn.send(chunkMessage);
+                                        console.log(`Sent chunk ${index + 1}/${chunks.length} to peer: ${conn.peer}`);
+                                    } catch (error) {
+                                        console.error(`Error sending chunk ${index + 1} to peer ${conn.peer}:`, error);
+                                    }
+                                }
+                            }, index * 100); // 100ms delay between chunks
+                        });
+                    } catch (error) {
+                        console.error(`Error sending chunk info to peer ${conn.peer}:`, error);
+                    }
+                } else {
+                    console.warn(`Connection to peer ${conn.peer} is not open`);
+                }
+            });
+        } else {
+            // For smaller images, send as a single message
+            const message = {
+                type: 'image',
+                imageData: imageData,
+                timestamp: Date.now()
+            };
+            
+            this.connections.forEach(conn => {
+                if (conn.open) {
+                    try {
+                        console.log(`Sending image to peer: ${conn.peer}`);
+                        conn.send(message);
+                        console.log(`Image sent successfully to peer: ${conn.peer}`);
+                    } catch (error) {
+                        console.error('Error sending image:', error);
+                        this.updateStatus('Error sending image to peer');
+                    }
+                } else {
+                    console.warn(`Connection to peer ${conn.peer} is not open`);
+                }
+            });
+        }
     }
 
     updatePeerCount() {
