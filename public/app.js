@@ -23,12 +23,14 @@ class P2PImageShare {
         this.dropZone = document.getElementById('dropZone');
         this.imageGallery = document.getElementById('imageGallery');
         this.peerCountElement = document.getElementById('peerCount');
+        this.copyButton = document.getElementById('copyRoomId');
     }
 
     setupEventListeners() {
         this.createRoomBtn.addEventListener('click', () => this.createRoom());
         this.joinRoomBtn.addEventListener('click', () => this.joinRoom());
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        this.copyButton.addEventListener('click', () => this.copyRoomId());
         
         this.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -251,6 +253,28 @@ class P2PImageShare {
         
         this.versionElement.textContent = this.version;
         console.log(`Version updated to ${this.version}`);
+    }
+
+    async copyRoomId() {
+        const roomId = this.roomIdInput.value.trim();
+        if (!roomId) {
+            this.updateStatus('No room ID to copy');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(roomId);
+            this.copyButton.classList.add('copied');
+            this.updateStatus('Room ID copied to clipboard');
+            
+            // Remove the copied class after 2 seconds
+            setTimeout(() => {
+                this.copyButton.classList.remove('copied');
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy room ID:', err);
+            this.updateStatus('Failed to copy room ID');
+        }
     }
 }
 

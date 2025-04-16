@@ -40,4 +40,58 @@
     padding: 0.3rem 0.6rem;
     border-radius: 12px;
     font-family: monospace;
+}
+
+.room-id-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.room-id-container input {
+    flex: 1;
+    padding-right: 40px;
+}
+
+.copy-button {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--primary-color);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.copy-button:hover {
+    background-color: rgba(33, 150, 243, 0.1);
+}
+
+.copy-button:active {
+    background-color: rgba(33, 150, 243, 0.2);
+}
+
+.copy-button svg {
+    width: 16px;
+    height: 16px;
+}
+
+.copy-button.copied {
+    color: #4CAF50;
+}
+
+.copy-button.copied svg {
+    animation: pop 0.3s ease-in-out;
+}
+
+@keyframes pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
 } 
