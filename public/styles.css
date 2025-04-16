@@ -1,3 +1,38 @@
+/* Base styles */
+:root {
+    --primary-color: #2196f3;
+    --border-radius: 8px;
+    --spacing: 1rem;
+    --max-width: 1200px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.5;
+}
+
+.container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--spacing);
+    box-sizing: border-box;
+}
+
+header {
+    margin-bottom: var(--spacing);
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: var(--primary-color);
+}
+
+/* Connection status styles */
 .connection-status {
     display: flex;
     flex-direction: column;
@@ -5,6 +40,7 @@
     padding: 0.5rem 1rem;
     border-radius: var(--border-radius);
     background-color: #e0e0e0;
+    margin-bottom: var(--spacing);
 }
 
 .peer-count {
@@ -42,6 +78,17 @@
     font-family: monospace;
 }
 
+/* Room controls styles */
+.connection-section {
+    margin-bottom: var(--spacing);
+}
+
+.room-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
 .room-id-container {
     position: relative;
     display: flex;
@@ -51,7 +98,11 @@
 
 .room-id-container input {
     flex: 1;
+    padding: 0.5rem 1rem;
     padding-right: 40px;
+    border: 1px solid #ddd;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
 }
 
 .copy-button {
@@ -94,4 +145,159 @@
     0% { transform: scale(1); }
     50% { transform: scale(1.2); }
     100% { transform: scale(1); }
+}
+
+button {
+    padding: 0.5rem 1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #1976d2;
+}
+
+/* Image section styles */
+.image-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing);
+}
+
+.upload-area {
+    border: 2px dashed #ddd;
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    text-align: center;
+    transition: border-color 0.2s;
+    background-color: white;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color);
+}
+
+#fileInput {
+    display: none;
+}
+
+.upload-prompt {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+/* Gallery styles */
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 0.5rem;
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.image-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    background-color: #f0f0f0;
+}
+
+.gallery img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, opacity 0.3s ease-in-out;
+}
+
+.gallery img:hover {
+    transform: scale(1.05);
+}
+
+.loading-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f0f0f0;
+}
+
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(33, 150, 243, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #f44336;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 0.5rem;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .container {
+        padding: 0.5rem;
+    }
+    
+    h1 {
+        font-size: 1.5rem;
+    }
+    
+    .gallery {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        max-height: 50vh;
+    }
+    
+    .image-container {
+        height: 150px;
+    }
+    
+    .upload-area {
+        padding: 1rem;
+    }
+    
+    .upload-prompt {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .gallery {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        max-height: 40vh;
+    }
+    
+    .image-container {
+        height: 120px;
+    }
 } 

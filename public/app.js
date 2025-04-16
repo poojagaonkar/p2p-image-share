@@ -199,7 +199,43 @@ class P2PImageShare {
         const img = document.createElement('img');
         img.src = imageData;
         img.alt = 'Shared image';
-        this.imageGallery.appendChild(img);
+        
+        // Add loading state
+        img.style.opacity = '0';
+        
+        // Create a container for the image with loading indicator
+        const container = document.createElement('div');
+        container.className = 'image-container';
+        
+        // Add loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'loading-indicator';
+        loadingIndicator.innerHTML = '<div class="spinner"></div>';
+        container.appendChild(loadingIndicator);
+        
+        // Add image to container
+        container.appendChild(img);
+        
+        // Add to gallery
+        this.imageGallery.appendChild(container);
+        
+        // Handle image load
+        img.onload = () => {
+            // Fade in the image
+            img.style.transition = 'opacity 0.3s ease-in-out';
+            img.style.opacity = '1';
+            
+            // Remove loading indicator
+            loadingIndicator.remove();
+            
+            // Scroll to the new image
+            container.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        };
+        
+        // Handle image error
+        img.onerror = () => {
+            container.innerHTML = '<div class="error-message">Failed to load image</div>';
+        };
     }
 
     shareImage(imageData) {
