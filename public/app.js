@@ -17,8 +17,18 @@ class P2PImageShare {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 3;
         
+        // Debug info
+        this.debugInfo = {
+            lastReceivedImage: null,
+            lastSentImage: null,
+            connectionStatus: 'disconnected',
+            peerId: null,
+            connectedPeers: []
+        };
+        
         this.initializeElements();
         this.setupEventListeners();
+        this.createDebugPanel();
     }
 
     initializeElements() {
@@ -57,6 +67,112 @@ class P2PImageShare {
         });
     }
 
+    createDebugPanel() {
+        // Create debug panel
+        const debugPanel = document.createElement('div');
+        debugPanel.className = 'debug-panel';
+        debugPanel.innerHTML = `
+            <div class="debug-header">
+                <h3>Debug Info</h3>
+                <button id="toggleDebug">Show/Hide</button>
+            </div>
+            <div class="debug-content">
+                <div class="debug-item">
+                    <span class="debug-label">Connection Status:</span>
+                    <span id="debugConnectionStatus">disconnected</span>
+                </div>
+                <div class="debug-item">
+                    <span class="debug-label">Your Peer ID:</span>
+                    <span id="debugPeerId">-</span>
+                </div>
+                <div class="debug-item">
+                    <span class="debug-label">Connected Peers:</span>
+                    <span id="debugConnectedPeers">0</span>
+                </div>
+                <div class="debug-item">
+                    <span class="debug-label">Last Image Received:</span>
+                    <span id="debugLastReceived">None</span>
+                </div>
+                <div class="debug-item">
+                    <span class="debug-label">Last Image Sent:</span>
+                    <span id="debugLastSent">None</span>
+                </div>
+                <div class="debug-item">
+                    <span class="debug-label">Device Type:</span>
+                    <span id="debugDeviceType">${this.getDeviceType()}</span>
+                </div>
+                <div class="debug-item">
+                    <button id="debugTestConnection">Test Connection</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(debugPanel);
+        
+        // Add event listeners
+        document.getElementById('toggleDebug').addEventListener('click', () => {
+            debugPanel.classList.toggle('expanded');
+        });
+        
+        document.getElementById('debugTestConnection').addEventListener('click', () => {
+            this.testConnection();
+        });
+    }
+    
+    getDeviceType() {
+        const ua = navigator.userAgent;
+        if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+            return 'tablet';
+        }
+        if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) {
+            return 'mobile';
+        }
+        return 'desktop';
+    }
+    
+    updateDebugInfo() {
+        if (document.getElementById('debugConnectionStatus')) {
+            document.getElementById('debugConnectionStatus').textContent = this.debugInfo.connectionStatus;
+        }
+        if (document.getElementById('debugPeerId')) {
+            document.getElementById('debugPeerId').textContent = this.debugInfo.peerId || '-';
+        }
+        if (document.getElementById('debugConnectedPeers')) {
+            document.getElementById('debugConnectedPeers').textContent = this.debugInfo.connectedPeers.length;
+        }
+        if (document.getElementById('debugLastReceived')) {
+            document.getElementById('debugLastReceived').textContent = this.debugInfo.lastReceivedImage ? 'Yes' : 'None';
+        }
+        if (document.getElementById('debugLastSent')) {
+            document.getElementById('debugLastSent').textContent = this.debugInfo.lastSentImage ? 'Yes' : 'None';
+        }
+    }
+    
+    testConnection() {
+        if (this.connections.size === 0) {
+            this.updateStatus('No peers connected to test with');
+            return;
+        }
+        
+        this.updateStatus('Testing connection with peers...');
+        
+        // Send a test message to all peers
+        this.connections.forEach((conn, peerId) => {
+            if (conn.open) {
+                try {
+                    conn.send({
+                        type: 'test',
+                        message: 'Connection test',
+                        timestamp: Date.now()
+                    });
+                    console.log(`Test message sent to peer: ${peerId}`);
+                } catch (error) {
+                    console.error(`Error sending test to peer ${peerId}:`, error);
+                }
+            }
+        });
+    }
+
     async createRoom() {
         try {
             this.peer = new Peer({
@@ -72,6 +188,11 @@ class P2PImageShare {
                 this.roomIdInput.value = id;
                 this.updatePeerCount();
                 this.startConnectionMonitoring();
+                
+                // Update debug info
+                this.debugInfo.peerId = id;
+                this.debugInfo.connectionStatus = 'connected';
+                this.updateDebugInfo();
             });
 
             this.peer.on('connection', (conn) => {
@@ -81,18 +202,30 @@ class P2PImageShare {
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 this.updateStatus('Connection error: ' + err.type);
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = `error: ${err.type}`;
+                this.updateDebugInfo();
             });
             
             this.peer.on('disconnected', () => {
                 console.log('Peer disconnected, attempting to reconnect...');
                 this.updateStatus('Connection lost, reconnecting...');
                 this.peer.reconnect();
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = 'disconnected';
+                this.updateDebugInfo();
             });
             
             this.peer.on('close', () => {
                 console.log('Peer connection closed');
                 this.updateStatus('Connection closed');
                 this.stopConnectionMonitoring();
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = 'closed';
+                this.updateDebugInfo();
             });
         } catch (error) {
             console.error('Error creating room:', error);
@@ -119,11 +252,20 @@ class P2PImageShare {
                 console.log('Attempting to connect to peer:', roomId);
                 const conn = this.peer.connect(roomId);
                 
+                // Update debug info
+                this.debugInfo.peerId = this.peer.id;
+                this.debugInfo.connectionStatus = 'connecting';
+                this.updateDebugInfo();
+                
                 // Add connection timeout
                 const timeout = setTimeout(() => {
                     if (!conn.open) {
                         this.updateStatus('Connection timeout - peer not responding');
                         console.error('Connection timeout to peer:', roomId);
+                        
+                        // Update debug info
+                        this.debugInfo.connectionStatus = 'timeout';
+                        this.updateDebugInfo();
                     }
                 }, 10000);  // 10 second timeout
 
@@ -135,30 +277,50 @@ class P2PImageShare {
                     this.updateStatus(`Connected to room: ${roomId}`);
                     this.updatePeerCount();
                     this.startConnectionMonitoring();
+                    
+                    // Update debug info
+                    this.debugInfo.connectionStatus = 'connected';
+                    this.updateDebugInfo();
                 });
 
                 conn.on('error', (err) => {
                     clearTimeout(timeout);
                     console.error('Connection error:', err);
                     this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
+                    
+                    // Update debug info
+                    this.debugInfo.connectionStatus = `error: ${err.type}`;
+                    this.updateDebugInfo();
                 });
             });
 
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = `error: ${err.type}`;
+                this.updateDebugInfo();
             });
             
             this.peer.on('disconnected', () => {
                 console.log('Peer disconnected, attempting to reconnect...');
                 this.updateStatus('Connection lost, reconnecting...');
                 this.peer.reconnect();
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = 'disconnected';
+                this.updateDebugInfo();
             });
             
             this.peer.on('close', () => {
                 console.log('Peer connection closed');
                 this.updateStatus('Connection closed');
                 this.stopConnectionMonitoring();
+                
+                // Update debug info
+                this.debugInfo.connectionStatus = 'closed';
+                this.updateDebugInfo();
             });
         } catch (error) {
             console.error('Error joining room:', error);
@@ -180,6 +342,10 @@ class P2PImageShare {
             });
             
             console.log(`New connection established with peer: ${conn.peer}`);
+            
+            // Update debug info
+            this.debugInfo.connectedPeers.push(conn.peer);
+            this.updateDebugInfo();
         });
 
         conn.on('data', (data) => {
@@ -188,9 +354,26 @@ class P2PImageShare {
             if (data.type === 'image') {
                 console.log(`Received image data, length: ${data.imageData ? data.imageData.length : 'undefined'} characters`);
                 this.displayImage(data.imageData);
+                
+                // Update debug info
+                this.debugInfo.lastReceivedImage = Date.now();
+                this.updateDebugInfo();
             } else if (data.type === 'version') {
                 console.log(`Peer version: ${data.version}, min compatible: ${data.minCompatibleVersion}`);
                 this.checkVersionCompatibility(data.version, data.minCompatibleVersion, conn);
+            } else if (data.type === 'test') {
+                console.log(`Received test message from peer ${conn.peer}:`, data.message);
+                this.updateStatus(`Connection test successful with peer ${conn.peer}`);
+                
+                // Send acknowledgment
+                conn.send({
+                    type: 'test_ack',
+                    message: 'Test received',
+                    timestamp: Date.now()
+                });
+            } else if (data.type === 'test_ack') {
+                console.log(`Received test acknowledgment from peer ${conn.peer}:`, data.message);
+                this.updateStatus(`Connection test successful with peer ${conn.peer}`);
             }
         });
 
@@ -199,11 +382,19 @@ class P2PImageShare {
             this.updateStatus('Peer disconnected');
             this.updatePeerCount();
             console.log(`Peer disconnected: ${conn.peer}`);
+            
+            // Update debug info
+            this.debugInfo.connectedPeers = this.debugInfo.connectedPeers.filter(id => id !== conn.peer);
+            this.updateDebugInfo();
         });
 
         conn.on('error', (err) => {
             console.error('Connection error:', err);
             this.updateStatus('Connection error with peer');
+            
+            // Update debug info
+            this.debugInfo.connectionStatus = `error: ${err.type}`;
+            this.updateDebugInfo();
         });
     }
 
@@ -398,6 +589,10 @@ class P2PImageShare {
         };
 
         console.log(`Sharing image with ${this.connections.size} peers`);
+        
+        // Update debug info
+        this.debugInfo.lastSentImage = Date.now();
+        this.updateDebugInfo();
         
         this.connections.forEach(conn => {
             if (conn.open) {

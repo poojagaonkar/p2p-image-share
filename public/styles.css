@@ -329,4 +329,96 @@ button:hover {
     .image-container {
         height: 120px;
     }
+}
+
+/* Debug Panel */
+.debug-panel {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 1000;
+    max-width: 300px;
+    transition: all 0.3s ease;
+}
+
+.debug-panel.expanded {
+    max-width: 400px;
+}
+
+.debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.debug-header h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.debug-content {
+    display: none;
+}
+
+.debug-panel.expanded .debug-content {
+    display: block;
+}
+
+.debug-item {
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.debug-label {
+    color: #aaa;
+}
+
+#debugTestConnection {
+    width: 100%;
+    margin-top: 10px;
+    padding: 5px;
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#debugTestConnection:hover {
+    background-color: #1976d2;
+}
+
+#toggleDebug {
+    background: none;
+    border: 1px solid #aaa;
+    color: #aaa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+}
+
+#toggleDebug:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Make debug panel responsive */
+@media (max-width: 768px) {
+    .debug-panel {
+        bottom: 10px;
+        right: 10px;
+        max-width: 250px;
+    }
+    
+    .debug-panel.expanded {
+        max-width: 300px;
+    }
 } 
