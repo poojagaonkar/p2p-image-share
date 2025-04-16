@@ -1,0 +1,21 @@
+{
+  "name": "p2p-image-share",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+  "start": "node server.js",
+  "dev": "webpack --config webpack.dev.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/poojagaonkar/p2p-image-share.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/poojagaonkar/p2p-image-share/issues"
+  },
+  "homepage": "https://github.com/poojagaonkar/p2p-image-share#readme",
+  "description": ""
+}

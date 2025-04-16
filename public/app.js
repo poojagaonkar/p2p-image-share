@@ -88,25 +88,45 @@ class P2PImageShare {
             this.peer = new Peer({
                 secure: true,
                 host: '0.peerjs.com',
-                port: 443
+                port: 443,
+                debug: 3  // Enable debug logging
             });
 
             this.peer.on('open', () => {
+                console.log('Attempting to connect to peer:', roomId);
                 const conn = this.peer.connect(roomId);
-                this.handleNewConnection(conn);
-                this.roomId = roomId;
-                this.isHost = false;
-                this.updateStatus(`Connected to room: ${roomId}`);
-                this.updatePeerCount();
+                
+                // Add connection timeout
+                const timeout = setTimeout(() => {
+                    if (!conn.open) {
+                        this.updateStatus('Connection timeout - peer not responding');
+                        console.error('Connection timeout to peer:', roomId);
+                    }
+                }, 10000);  // 10 second timeout
+
+                conn.on('open', () => {
+                    clearTimeout(timeout);
+                    this.handleNewConnection(conn);
+                    this.roomId = roomId;
+                    this.isHost = false;
+                    this.updateStatus(`Connected to room: ${roomId}`);
+                    this.updatePeerCount();
+                });
+
+                conn.on('error', (err) => {
+                    clearTimeout(timeout);
+                    console.error('Connection error:', err);
+                    this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
+                });
             });
 
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
-                this.updateStatus('Connection error: ' + err.type);
+                this.updateStatus(`Connection error: ${err.type} - ${err.message}`);
             });
         } catch (error) {
             console.error('Error joining room:', error);
-            this.updateStatus('Error joining room');
+            this.updateStatus(`Error joining room: ${error.message}`);
         }
     }
 
